@@ -1,24 +1,32 @@
-import re
-import flet as ft
-from netmiko import SSHDetect, ConnectHandler
-from datetime import datetime
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+"""
+@File    :   main.py
+@Time    :   2024/03/23 20:31:00
+@Author  :   Yi yulin 
+@Contact :   844202100@qq.com
+@Desc    :   a switch backup model
+"""
+
+
 import os
-
-import socks
-import socket
-
-# # 设置代理服务器地址和端口
-# socks.set_default_proxy(socks.HTTP,
-#                         addr="172.20.255.4",
-#                         port=32123,
-#                         username="yiyulin",
-#                         password="yyl123456")
-
-# # 设置socket包装
-# socket.socket = socks.socksocket
+import re
+from datetime import datetime
+from netmiko import SSHDetect, ConnectHandler
+import customtkinter
 
 
 def netmiko_ssh_detect_stype(ip: str, usrname: str, password: str) -> str:
+    """netmiko_ssh_detect_stype
+
+    Args:
+        ip (str): login/manage ip
+        usrname (str): login/manage username
+        password (str): login/manage password
+
+    Returns:
+        str: switch device type
+    """
     dev = {
         "device_type": "autodetect",
         "host": ip,
@@ -31,8 +39,16 @@ def netmiko_ssh_detect_stype(ip: str, usrname: str, password: str) -> str:
 
 
 def backup_sw(ip: str, usrname: str, password: str) -> str:
+    """backup_sw
+    AArgs:
+        ip (str): login/manage ip
+        usrname (str): login/manage username
+        password (str): login/manage password
+
+    Returns:
+        str: info of result
+    """
     device_type = netmiko_ssh_detect_stype(ip, usrname, password)
-    # h3c 交换机不支持自动检测需要修改源码
     if device_type is None:
         device_type = "hp_comware"
     try:
@@ -51,7 +67,6 @@ def backup_sw(ip: str, usrname: str, password: str) -> str:
                     read_timeout=30,
                     expect_string="return",
                 )
-                # 正则提取H3C的配置，华为和思科没有这个问题
                 if device_type == "hp_comware":
                     match = re.search(r"#.*?return", configuration, re.DOTALL)
                     if match:
@@ -66,7 +81,7 @@ def backup_sw(ip: str, usrname: str, password: str) -> str:
             if not os.path.exists(date):
                 os.makedirs(date)
 
-            with open(os.path.join(date, f"{ip}.config"), "w") as f:
+            with open(os.path.join(date, f"{ip}.config"), "w", encoding="utf-8") as f:
                 f.write(configuration)
             return f"{ip}_success"
 
@@ -75,57 +90,86 @@ def backup_sw(ip: str, usrname: str, password: str) -> str:
 
 
 def backup_switches(lines: str) -> str:
+    """readlines to backup_switches
+
+    Args:
+        lines (str): lines
+
+    Returns:
+        str: result
+    """
     res = []
     for line in lines.split("\n"):
         line = line.strip()
-        ip, username, password = line.split(" ")
-        info = backup_sw(ip, username, password)
-        res.append(info)
+        if len(line) > 1:
+            ip, username, password = re.split(r"\s+", line)
+            info = backup_sw(ip, username, password)
+            res.append(info)
     return "\n".join(res)
 
 
-def main(page: ft.Page):
-    page.title = "交换机备份小工具"
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.MainAxisAlignment.CENTER
-    page.window_width = 400
+def get_local_storage() -> str:
+    """Get local Storage"""
+    data = ""
+    if os.path.exists("data"):
+        with open("data", "r", encoding="utf-8") as f:
+            data = f.read()
+    return data
 
-    def open_dlg(message):
-        page.dialog = ft.AlertDialog(title=ft.Text(message))
-        page.dialog.open = True
-        page.update()
 
-    def btn_click(e):
-        if not txt_name.value:
-            txt_name.error_text = "请输入规范的行（格式：IP, 用户名, 密码）"
-            page.update()
+def set_local_storage(data: str):
+    """set local Storage"""
+    with open("data", "w", encoding="utf-8") as f:
+        f.write(data)
+
+
+class ToplevelWindow(customtkinter.CTkToplevel):
+
+    def __init__(self, *args, text="top", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.geometry("300x500")
+        self.label = customtkinter.CTkLabel(self, text=text)
+        self.label.pack(padx=20, pady=20)
+
+
+class App(customtkinter.CTk):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.toplevel_window = None
+        self.title("Switch Backup")
+        self.geometry("300x600")
+        self.grid_columnconfigure((0), weight=1)
+
+        self.label = customtkinter.CTkLabel(self, text="Input ip, username, password")
+        self.label.configure(corner_radius=0.2, font=("Golos UI Bold", 19))
+        self.label.grid(row=0, column=0, pady=10)
+
+        self.textbox = customtkinter.CTkTextbox(self)
+        self.textbox.configure(height=500, font=("Golos UI Bold", 15))
+        self.textbox.grid(row=1, column=0, padx=20, sticky="ew")
+        self.textbox.insert("0.0", get_local_storage())
+
+        self.button = customtkinter.CTkButton(
+            self, text="Start Backup~", command=self.button_backup
+        )
+        self.button.grid(row=2, column=0, padx=20, pady=8, sticky="ew", columnspan=2)
+
+        self.toplevel_window = None
+
+    def button_backup(self):
+        """button_backup"""
+        text = self.textbox.get("0.0", "end")
+        set_local_storage(text)
+        # backup switch
+        res = backup_switches(text)
+        if self.toplevel_window is None or not self.toplevel_window.winfo_exists():
+            self.toplevel_window = ToplevelWindow(text=res)
+            # top one the info window
+            self.toplevel_window.attributes("-topmost", 1)
         else:
-            page.client_storage.set("switch_info", txt_name.value)
-            res = backup_switches(txt_name.value)
-            open_dlg(res)
-
-    values = page.client_storage.get("switch_info")
-    txt_name = ft.TextField(
-        label="交换机管理IP, 用户名, 密码",
-        multiline=True,
-        width=350,
-        height=500,
-        value=values,
-    )
-
-    page.add(
-        txt_name,
-        ft.ElevatedButton(
-            "开始备份~",
-            on_click=btn_click,
-        ),
-    )
+            self.toplevel_window.focus()
 
 
 if __name__ == "__main__":
-    ft.app(target=main)
-
-    # with open("data") as f:
-    #     data = f.read()
-    # res = backup_switches(data)
-    # print(res)
+    switch_app = App()
+    switch_app.mainloop()
