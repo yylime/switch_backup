@@ -14,7 +14,7 @@ import re
 from datetime import datetime
 from netmiko import SSHDetect, ConnectHandler
 import customtkinter
-
+from concurrent.futures import ThreadPoolExecutor
 
 def netmiko_ssh_detect_stype(ip: str, usrname: str, password: str) -> str:
     """netmiko_ssh_detect_stype
@@ -98,13 +98,15 @@ def backup_switches(lines: str) -> str:
     Returns:
         str: result
     """
+    # use threadpool in mainloop instead of waiting
     res = []
-    for line in lines.split("\n"):
-        line = line.strip()
-        if len(line) > 1:
-            ip, username, password = re.split(r"\s+", line)
-            info = backup_sw(ip, username, password)
-            res.append(info)
+    with ThreadPoolExecutor(8) as pool:
+        for line in lines.split("\n"):
+            line = line.strip()
+            if len(line) > 1:
+                ip, username, password = re.split(r"\s+", line)
+                future = pool.submit(backup_sw, (ip, username, password))
+                res.append(future.result())
     return "\n".join(res)
 
 
