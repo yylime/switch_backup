@@ -14,7 +14,6 @@ import threading
 import customtkinter
 from datetime import datetime
 from netmiko import SSHDetect, ConnectHandler
-from concurrent.futures import ThreadPoolExecutor
 
 
 def netmiko_ssh_detect_stype(ip: str, usrname: str, password: str) -> str:
@@ -34,9 +33,14 @@ def netmiko_ssh_detect_stype(ip: str, usrname: str, password: str) -> str:
         "username": usrname,
         "password": password,
     }
-    guesser = SSHDetect(**dev)
-    best_match = guesser.autodetect()
-    return best_match
+    try:
+        guesser = SSHDetect(**dev)
+        best_match = guesser.autodetect()
+        if best_match is None:
+            return "hp_comware"
+        return best_match
+    except:
+        return "hp_comware"
 
 
 def get_local_storage() -> str:
@@ -127,10 +131,7 @@ class App(customtkinter.CTk):
         """
 
         ip, usrname, password = item
-        try:
-            device_type = netmiko_ssh_detect_stype(ip, usrname, password)
-        except:
-            device_type = "hp_comware"
+        device_type = netmiko_ssh_detect_stype(ip, usrname, password)
         try:
             with ConnectHandler(
                 device_type=device_type,
