@@ -91,7 +91,7 @@ class App(customtkinter.CTk):
         self.button.grid(row=2, column=0, padx=20, pady=8, sticky="ew", columnspan=2)
 
         self.toplevel_window = None
-        self.top_text = "Start backup"
+        self.top_text = "Start backup\n"
 
     def button_backup(self):
         """button_backup"""
@@ -166,7 +166,7 @@ class App(customtkinter.CTk):
                     os.path.join(date, f"{ip}.config"), "w", encoding="utf-8"
                 ) as f:
                     f.write(configuration)
-
+                self.update_message(f"{ip}_success")
                 return f"{ip}_success"
 
         except Exception as e:
